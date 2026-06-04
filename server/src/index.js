@@ -13,6 +13,7 @@ import subtitleRoutes from './routes/subtitles.js'
 import libraryRoutes from './routes/libraries.js'
 import federationRoutes from './routes/federation.js'
 import { startFederation } from './federation.js'
+import { startMdns } from './mdns.js'
 
 const app = Fastify({ logger: true })
 
@@ -50,6 +51,7 @@ try {
   await app.listen({ port: parseInt(process.env.PORT || '3000'), host: '0.0.0.0' })
 
   startFederation().catch(e => console.error('[Federation startup]', e.message))
+  startMdns(parseInt(process.env.PORT || '3000'))
 
   const mediaPath = process.env.MEDIA_PATH || '/media'
   console.log(`[PixelVault] Starting initial scan of ${mediaPath}`)
