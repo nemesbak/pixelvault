@@ -31,7 +31,12 @@ export default async function pairingRoutes(fastify) {
       [code, userId, expiresAt]
     )
 
-    const serverUrl = `http://${req.hostname}:${process.env.PORT || 3000}`
+    // clientHost is the browser's window.location.hostname — the real LAN IP the user sees.
+    // req.hostname is unreliable when behind Vite proxy (changeOrigin:true sets it to the Docker service name).
+    const INTERNAL = new Set(['localhost', '127.0.0.1', 'server', '0.0.0.0', '::1'])
+    const { clientHost } = req.body || {}
+    const host = (clientHost && !INTERNAL.has(clientHost)) ? clientHost : req.hostname
+    const serverUrl = `http://${host}:${process.env.PORT || 3000}`
     const qrData = `${serverUrl}/pair/${code}`
     const qrDataUri = await QRCode.toDataURL(qrData, { width: 200, margin: 1 })
 
@@ -55,6 +60,11 @@ export default async function pairingRoutes(fastify) {
     if (!user.rows[0]) return reply.code(404).send({ error: 'User not found' })
 
     const token = jwt.sign({ id: user.rows[0].id, username: user.rows[0].username }, JWT_SECRET, { expiresIn: '90d' })
-    return { token, user: user.rows[0] }
+    // Include serverUrl so the mobile app can store the correct LAN IP after redeeming via code
+    const INTERNAL = new Set(['localhost', '127.0.0.1', 'server', '0.0.0.0', '::1'])
+    const { clientHost } = req.body || {}
+    const host = (clientHost && !INTERNAL.has(clientHost)) ? clientHost : req.hostname
+    const serverUrl = `http://${host}:${process.env.PORT || 3000}`
+    return { token, user: user.rows[0], serverUrl }
   })
 }

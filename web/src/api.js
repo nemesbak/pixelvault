@@ -42,7 +42,7 @@ export const api = {
   saveProgress: (userId, mediaId, position, completed) =>
     req('POST', '/media/progress', { userId, mediaId, position, completed }),
 
-  generatePairCode: () => req('POST', '/pair/generate'),
+  generatePairCode: () => req('POST', '/pair/generate', { clientHost: window.location.hostname }),
   redeemPairCode: (code) => req('POST', '/pair/redeem', { code }),
 
   getShows: (params = {}) => { const qs = new URLSearchParams(params).toString(); return req('GET', `/shows${qs ? '?' + qs : ''}`) },

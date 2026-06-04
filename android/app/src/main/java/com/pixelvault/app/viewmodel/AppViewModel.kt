@@ -236,8 +236,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun api() = ApiClient(_state.value.serverUrl, _state.value.token)
 
     private suspend fun applyAuth(res: AuthResponse) {
-        prefs.saveSession(_state.value.serverUrl, res.token, res.user.id, res.user.username)
+        // If the server returned a serverUrl (from redeem response), prefer it over the discovered one
+        // as long as it's a real LAN address (not localhost/server Docker alias)
+        val internalHosts = setOf("localhost", "127.0.0.1", "server", "0.0.0.0")
+        val resolvedUrl = res.serverUrl
+            ?.takeIf { url -> internalHosts.none { url.contains(it) } }
+            ?: _state.value.serverUrl
+        prefs.saveSession(resolvedUrl, res.token, res.user.id, res.user.username)
         _state.value = _state.value.copy(
+            serverUrl = resolvedUrl,
             token = res.token, userId = res.user.id, username = res.user.username, isLoading = false
         )
     }

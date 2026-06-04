@@ -12,7 +12,8 @@ data class User(
 @Serializable
 data class AuthResponse(
     val token: String,
-    val user: User
+    val user: User,
+    val serverUrl: String? = null
 )
 
 @Serializable
