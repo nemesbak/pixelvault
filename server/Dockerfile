@@ -1,5 +1,5 @@
 # ── Stage 1: dependencies ──────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:26-alpine AS deps
 
 RUN apk add --no-cache python3 make g++
 
@@ -8,7 +8,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 # ── Stage 2: production image ──────────────────────────
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 
 # ffmpeg for thumbnail generation and media probing
 RUN apk add --no-cache ffmpeg
