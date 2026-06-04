@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pixelvault_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pixelvault
+      POSTGRES_USER: pixelvault
+      POSTGRES_PASSWORD: pixelvault_secret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pixelvault"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build: ./server
+    container_name: pixelvault_server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://pixelvault:pixelvault_secret@postgres:5432/pixelvault
+      MEDIA_PATH: /media
+      THUMBNAILS_PATH: /thumbnails
+      JWT_SECRET: pixelvault_jwt_change_in_prod
+      PORT: 3000
+      DHT_PORT: 6881
+      NODE_ENV: development
+      TMDB_TOKEN: ${TMDB_TOKEN}
+    volumes:
+      - ./server/src:/app/src
+      - ${MEDIA_PATH:-C:/Users/nemes/Downloads/telegram}:/media:ro
+      - thumbnails_data:/thumbnails
+    ports:
+      - "3000:3000"
+      - "6881:6881/udp"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    container_name: pixelvault_web
+    restart: unless-stopped
+    volumes:
+      - ./web/src:/app/src
+      - ./web/index.html:/app/index.html
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+
+  # Optional: self-hosted signaling server
+  # To use: uncomment, expose port 4747, set SIGNAL_URL=http://<your-public-ip>:4747 in server env
+  # signal:
+  #   image: node:20-alpine
+  #   container_name: pixelvault_signal
+  #   restart: unless-stopped
+  #   working_dir: /app
+  #   volumes:
+  #     - ./signaling:/app
+  #   command: node server.js
+  #   ports:
+  #     - "4747:4747"
+
+volumes:
+  postgres_data:
+  thumbnails_data:

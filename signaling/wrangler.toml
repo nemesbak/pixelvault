@@ -1,0 +1,7 @@
+name = "pixelvault-connect"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "PV_KV"
+id = "REPLACE_WITH_YOUR_KV_ID"

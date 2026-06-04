@@ -1,0 +1,58 @@
+version: '3.8'
+
+# Production compose — uses pre-built images from Docker Hub.
+# Run with: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pixelvault_db
+    restart: always
+    environment:
+      POSTGRES_DB: pixelvault
+      POSTGRES_USER: pixelvault
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pixelvault"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Do NOT expose 5432 in production
+
+  server:
+    image: nemesbak/pixelvault-server:latest
+    container_name: pixelvault_server
+    restart: always
+    environment:
+      DATABASE_URL: postgres://pixelvault:${DB_PASSWORD}@postgres:5432/pixelvault
+      MEDIA_PATH: /media
+      THUMBNAILS_PATH: /thumbnails
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PORT: 3000
+      DHT_PORT: 6881
+      NODE_ENV: production
+      TMDB_TOKEN: ${TMDB_TOKEN}
+    volumes:
+      - ${MEDIA_PATH:?MEDIA_PATH is required}:/media:ro
+      - thumbnails_data:/thumbnails
+    ports:
+      - "3000:3000"
+      - "6881:6881/udp"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: nemesbak/pixelvault-web:latest
+    container_name: pixelvault_web
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  postgres_data:
+  thumbnails_data:
