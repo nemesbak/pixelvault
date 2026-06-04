@@ -117,14 +117,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun probeAndSetUrl(url: String) {
+    fun probeServer(url: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            if (ApiClient(url).health().isSuccess) {
-                _discoveredUrl.value = url
-                _state.value = _state.value.copy(serverUrl = url)
-                prefs.saveServerUrl(url)
+            val clean = url.trimEnd('/')
+                .let { if (it.startsWith("http")) it else "http://$it" }
+            val ok = ApiClient(clean).health().isSuccess
+            if (ok) {
+                _discoveredUrl.value = clean
+                _state.value = _state.value.copy(serverUrl = clean)
+                prefs.saveServerUrl(clean)
             }
+            onResult(ok)
         }
+    }
+
+    private fun probeAndSetUrl(url: String) {
+        probeServer(url)
     }
 
     fun stopServerDiscovery() {

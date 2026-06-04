@@ -13,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -23,6 +25,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,6 +54,9 @@ fun PairCodeScreen(
     val isDiscovering by viewModel.isDiscovering.collectAsState()
     val discoveredUrl by viewModel.discoveredUrl.collectAsState()
     val savedUrl = state.serverUrl.ifBlank { null }
+    val showManualInput = !isDiscovering && discoveredUrl == null && savedUrl == null
+    var manualUrl by remember { mutableStateOf("") }
+    var probeError by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.startServerDiscovery() }
     DisposableEffect(Unit) { onDispose { viewModel.stopServerDiscovery() } }
@@ -88,6 +96,23 @@ fun PairCodeScreen(
             // Server discovery status
             DiscoveryStatus(isDiscovering, discoveredUrl, savedUrl)
 
+            // Manual IP input — shown only when auto-discovery fails completely
+            if (showManualInput) {
+                Spacer(Modifier.height(10.dp))
+                ManualServerInput(
+                    value = manualUrl,
+                    onValueChange = { manualUrl = it; probeError = false },
+                    isLoading = state.isLoading,
+                    isError = probeError,
+                    onConnect = {
+                        probeError = false
+                        viewModel.probeServer(manualUrl) { ok ->
+                            if (!ok) probeError = true
+                        }
+                    }
+                )
+            }
+
             Spacer(Modifier.height(40.dp))
 
             Text("ENTER CODE", style = MaterialTheme.typography.headlineMedium)
@@ -118,6 +143,92 @@ fun PairCodeScreen(
                 onOk = { redeem() },
                 enabled = !state.isLoading,
                 okEnabled = digits.length == 6 && (isDiscovering || discoveredUrl != null || savedUrl != null)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManualServerInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    isLoading: Boolean,
+    isError: Boolean,
+    onConnect: () -> Unit
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    Column {
+        Text(
+            "SERVER NOT FOUND — enter IP manually:",
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 7.sp,
+            color = ErrorRed,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = {
+                    Text(
+                        "192.168.1.x:3000",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp,
+                        color = TextSecondary.copy(alpha = 0.5f)
+                    )
+                },
+                singleLine = true,
+                isError = isError,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = {
+                    keyboard?.hide(); onConnect()
+                }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = NeonGreen,
+                    unfocusedBorderColor = TextSecondary.copy(alpha = 0.4f),
+                    errorBorderColor = ErrorRed,
+                    focusedTextColor = NeonGreen,
+                    unfocusedTextColor = NeonGreen,
+                    cursorColor = NeonGreen
+                ),
+                textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                modifier = Modifier.weight(1f).height(48.dp)
+            )
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .border(1.dp, if (isLoading) TextSecondary else NeonGreen, PixelShape)
+                    .background(NeonGreen.copy(alpha = if (isLoading) 0f else 0.1f))
+                    .clickable(enabled = !isLoading && value.isNotBlank()) {
+                        keyboard?.hide(); onConnect()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = NeonGreen,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp)
+                    )
+                } else {
+                    Text("▶", style = MaterialTheme.typography.bodyMedium, color = NeonGreen)
+                }
+            }
+        }
+        if (isError) {
+            Text(
+                "Cannot reach server. Check IP and port.",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 7.sp,
+                color = ErrorRed,
+                modifier = Modifier.padding(top = 4.dp)
             )
         }
     }
