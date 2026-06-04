@@ -21,9 +21,7 @@ jobs:
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
-      # audit-level=critical: fastify@4 has known high-severity vulns (GHSA-mrq3, GHSA-jx2c, GHSA-444r)
-      # that require a breaking Fastify 5 upgrade tracked in issue #1.
-      - run: npm audit --audit-level=critical
+      - run: npm audit --audit-level=high
 
   lint-web:
     name: Web — lint & build

@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import staticPlugin from '@fastify/static'
+import websocketPlugin from '@fastify/websocket'
 import { runMigrations } from './db.js'
 import { scanMedia } from './scanner.js'
 import mediaRoutes from './routes/media.js'
@@ -16,9 +17,7 @@ import { startFederation } from './federation.js'
 const app = Fastify({ logger: true })
 
 await app.register(cors, { origin: true, credentials: true })
-
-const websocketPlugin = await import('@fastify/websocket')
-await app.register(websocketPlugin.default)
+await app.register(websocketPlugin)
 
 // Allow POST routes with empty body
 app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -50,10 +49,8 @@ try {
   await runMigrations()
   await app.listen({ port: parseInt(process.env.PORT || '3000'), host: '0.0.0.0' })
 
-  // Start federation engine
   startFederation().catch(e => console.error('[Federation startup]', e.message))
 
-  // Initial scan on startup
   const mediaPath = process.env.MEDIA_PATH || '/media'
   console.log(`[PixelVault] Starting initial scan of ${mediaPath}`)
   scanMedia(mediaPath).catch(e => console.error('[Scan error]', e.message))
