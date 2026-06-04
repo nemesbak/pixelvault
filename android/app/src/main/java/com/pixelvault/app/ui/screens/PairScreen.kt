@@ -48,6 +48,7 @@ fun PairCodeScreen(
     var error by remember { mutableStateOf<String?>(null) }
     val isDiscovering by viewModel.isDiscovering.collectAsState()
     val discoveredUrl by viewModel.discoveredUrl.collectAsState()
+    val savedUrl = state.serverUrl.ifBlank { null }
 
     LaunchedEffect(Unit) { viewModel.startServerDiscovery() }
     DisposableEffect(Unit) { onDispose { viewModel.stopServerDiscovery() } }
@@ -85,7 +86,7 @@ fun PairCodeScreen(
             Spacer(Modifier.height(24.dp))
 
             // Server discovery status
-            DiscoveryStatus(isDiscovering, discoveredUrl)
+            DiscoveryStatus(isDiscovering, discoveredUrl, savedUrl)
 
             Spacer(Modifier.height(40.dp))
 
@@ -116,14 +117,14 @@ fun PairCodeScreen(
                 onDelete = { if (digits.isNotEmpty()) digits = digits.dropLast(1) },
                 onOk = { redeem() },
                 enabled = !state.isLoading,
-                okEnabled = digits.length == 6 && (isDiscovering || discoveredUrl != null)
+                okEnabled = digits.length == 6 && (isDiscovering || discoveredUrl != null || savedUrl != null)
             )
         }
     }
 }
 
 @Composable
-private fun DiscoveryStatus(isDiscovering: Boolean, discoveredUrl: String?) {
+private fun DiscoveryStatus(isDiscovering: Boolean, discoveredUrl: String?, savedUrl: String?) {
     val dotAnim by rememberInfiniteTransition(label = "dots").animateFloat(
         initialValue = 0f, targetValue = 3f,
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
@@ -131,28 +132,40 @@ private fun DiscoveryStatus(isDiscovering: Boolean, discoveredUrl: String?) {
     )
     val dots = ".".repeat((dotAnim.toInt() % 3) + 1).padEnd(3, ' ')
 
+    val hasFallback = !isDiscovering && discoveredUrl == null && savedUrl != null
+    val borderColor = when {
+        discoveredUrl != null -> NeonGreen
+        hasFallback -> Color(0xFFFFCC00)
+        else -> TextSecondary
+    }
+    val dotColor = when {
+        discoveredUrl != null -> NeonGreen
+        isDiscovering -> NeonGreen.copy(alpha = 0.4f)
+        hasFallback -> Color(0xFFFFCC00)
+        else -> ErrorRed
+    }
+    val label = when {
+        discoveredUrl != null -> "SERVER FOUND ✓"
+        isDiscovering -> "SCANNING LAN$dots"
+        hasFallback -> "USING SAVED SERVER"
+        else -> "SERVER NOT FOUND"
+    }
+    val labelColor = when {
+        discoveredUrl != null -> NeonGreen
+        hasFallback -> Color(0xFFFFCC00)
+        else -> TextSecondary
+    }
+
     Row(
         Modifier
             .fillMaxWidth()
-            .border(1.dp, if (discoveredUrl != null) NeonGreen else TextSecondary, PixelShape)
+            .border(1.dp, borderColor, PixelShape)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier
-                .size(8.dp)
-                .background(if (discoveredUrl != null) NeonGreen else if (isDiscovering) NeonGreen.copy(alpha = 0.4f) else ErrorRed)
-        )
+        Box(Modifier.size(8.dp).background(dotColor))
         Spacer(Modifier.width(12.dp))
-        Text(
-            when {
-                discoveredUrl != null -> "SERVER FOUND ✓"
-                isDiscovering -> "SCANNING LAN$dots"
-                else -> "SERVER NOT FOUND"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (discoveredUrl != null) NeonGreen else TextSecondary
-        )
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor)
     }
 }
 

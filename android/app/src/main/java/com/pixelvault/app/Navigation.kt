@@ -1,8 +1,11 @@
 package com.pixelvault.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
-import androidx.navigation.compose.*
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
+import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.pixelvault.app.ui.screens.*
 import com.pixelvault.app.viewmodel.AppViewModel
@@ -16,63 +19,85 @@ fun PixelVaultNav(viewModel: AppViewModel) {
 
     val start = if (state.token != null) "library" else "connect"
 
-    NavHost(navController = navController, startDestination = start) {
-
+    NavHost(
+        navController = navController,
+        startDestination = start,
+        modifier = Modifier.fillMaxSize()
+    ) {
         composable("connect") {
-            ConnectScreen(
-                onScanQr = { navController.navigate("qrscan") },
-                onEnterCode = { navController.navigate("codeentry") },
-                onLoginManual = { navController.navigate("login") }
-            )
+            Box(Modifier.fillMaxSize()) {
+                ConnectScreen(
+                    onScanQr = { navController.navigate("qrscan") },
+                    onEnterCode = { navController.navigate("codeentry") }
+                )
+            }
         }
 
         composable("qrscan") {
-            QrScanScreen(
-                viewModel = viewModel,
-                onPaired = {
-                    navController.navigate("library") {
-                        popUpTo("connect") { inclusive = true }
-                    }
-                },
-                onBack = { navController.popBackStack() }
-            )
+            Box(Modifier.fillMaxSize()) {
+                QrScanScreen(
+                    viewModel = viewModel,
+                    onPaired = {
+                        navController.navigate("library") {
+                            popUpTo("connect") { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable("codeentry") {
-            PairCodeScreen(
-                viewModel = viewModel,
-                onPaired = {
-                    navController.navigate("library") {
-                        popUpTo("connect") { inclusive = true }
-                    }
-                },
-                onBack = { navController.popBackStack() }
-            )
-        }
-
-        composable("login") {
-            LoginScreen(
-                viewModel = viewModel,
-                onLoggedIn = {
-                    navController.navigate("library") {
-                        popUpTo("connect") { inclusive = true }
-                    }
-                },
-                onBack = { navController.popBackStack() }
-            )
+            Box(Modifier.fillMaxSize()) {
+                PairCodeScreen(
+                    viewModel = viewModel,
+                    onPaired = {
+                        navController.navigate("library") {
+                            popUpTo("connect") { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable("library") {
-            LibraryScreen(
-                viewModel = viewModel,
-                onPlay = { id -> navController.navigate("player/$id") },
-                onLogout = {
-                    viewModel.logout()
-                    navController.navigate("connect") {
-                        popUpTo("library") { inclusive = true }
+            Box(Modifier.fillMaxSize()) {
+                LibraryScreen(
+                    viewModel = viewModel,
+                    onShowClick = { show ->
+                        if (show.type == "movie" || show.item_count <= 1) {
+                            // Película o show con un solo item → cargar detalle y reproducir
+                            viewModel.loadShowDetail(show.id)
+                            navController.navigate("show/${show.id}")
+                        } else {
+                            navController.navigate("show/${show.id}")
+                        }
+                    },
+                    onLogout = {
+                        viewModel.logout()
+                        navController.navigate("connect") {
+                            popUpTo("library") { inclusive = true }
+                        }
                     }
-                }
-            )
+                )
+            }
+        }
+
+        composable(
+            "show/{showId}",
+            arguments = listOf(navArgument("showId") { type = NavType.StringType })
+        ) { back ->
+            val showId = back.arguments?.getString("showId") ?: return@composable
+            val show = state.showDetail
+            Box(Modifier.fillMaxSize()) {
+                ShowDetailScreen(
+                    showId = showId,
+                    viewModel = viewModel,
+                    onPlay = { mediaId -> navController.navigate("player/$mediaId") },
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable(
@@ -80,11 +105,13 @@ fun PixelVaultNav(viewModel: AppViewModel) {
             arguments = listOf(navArgument("mediaId") { type = NavType.StringType })
         ) { back ->
             val mediaId = back.arguments?.getString("mediaId") ?: return@composable
-            PlayerScreen(
-                mediaId = mediaId,
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() }
-            )
+            Box(Modifier.fillMaxSize()) {
+                PlayerScreen(
+                    mediaId = mediaId,
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

@@ -6,6 +6,7 @@ import android.net.nsd.NsdServiceInfo
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pixelvault.app.data.*
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -15,6 +16,8 @@ data class AppState(
     val userId: String?     = null,
     val username: String?   = null,
     val media: List<MediaItem> = emptyList(),
+    val shows: List<Show>   = emptyList(),
+    val showDetail: ShowDetail? = null,
     val isLoading: Boolean  = false,
     val error: String?      = null,
     val isReady: Boolean    = false
@@ -107,6 +110,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         discoveryTimeoutJob = viewModelScope.launch {
             delay(12_000)
             stopServerDiscovery()
+            // Si mDNS no encontró nada, probar gateway del emulador Android (host machine)
+            if (_discoveredUrl.value == null && _state.value.serverUrl.isBlank()) {
+                probeAndSetUrl("http://10.0.2.2:3000")
+            }
+        }
+    }
+
+    private fun probeAndSetUrl(url: String) {
+        viewModelScope.launch {
+            if (ApiClient(url).health().isSuccess) {
+                _discoveredUrl.value = url
+                _state.value = _state.value.copy(serverUrl = url)
+                prefs.saveServerUrl(url)
+            }
         }
     }
 
@@ -177,6 +194,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { _state.value = _state.value.copy(media = it.items, isLoading = false) }
                 .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
         }
+    }
+
+    fun loadShows(type: String? = null, search: String? = null) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null)
+            runCatching { api().getShows(type = type, search = search?.ifBlank { null }) }
+                .onSuccess { _state.value = _state.value.copy(shows = it, isLoading = false) }
+                .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
+        }
+    }
+
+    fun loadShowDetail(showId: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isLoading = true, error = null, showDetail = null)
+            runCatching { api().getShow(showId) }
+                .onSuccess { _state.value = _state.value.copy(showDetail = it, isLoading = false) }
+                .onFailure { _state.value = _state.value.copy(isLoading = false, error = it.message) }
+        }
+    }
+
+    fun clearShowDetail() {
+        _state.update { it.copy(showDetail = null) }
     }
 
     fun saveProgress(mediaId: String, positionSec: Int, duration: Int) {

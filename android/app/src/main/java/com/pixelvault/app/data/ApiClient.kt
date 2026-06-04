@@ -64,6 +64,16 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
         }
     }
 
+    suspend fun getShows(type: String? = null, search: String? = null): List<Show> =
+        http.get("$baseUrl/api/shows") {
+            auth()
+            type?.let { parameter("type", it) }
+            search?.let { parameter("search", it) }
+        }.body()
+
+    suspend fun getShow(id: String): ShowDetail =
+        http.get("$baseUrl/api/shows/$id") { auth() }.body()
+
     suspend fun generatePairCode(): PairResponse =
         http.post("$baseUrl/api/pair/generate") { auth() }.body()
 
@@ -81,7 +91,9 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
 
     fun thumbnailUrl(path: String?): String? {
         if (path.isNullOrBlank()) return null
-        return if (path.startsWith("http")) path else "$baseUrl$path"
+        if (path.startsWith("http")) return path
+        val clean = path.trimStart('/')
+        return "$baseUrl/thumbnails/$clean"
     }
 
     fun close() = http.close()

@@ -1,4 +1,5 @@
-import { Bonjour } from 'bonjour-service'
+import BonjourLib from 'bonjour-service'
+const { Bonjour } = BonjourLib
 
 let bonjour = null
 

@@ -63,3 +63,28 @@ data class ProgressRequest(
 
 @Serializable
 data class CodeRequest(val code: String)
+
+@Serializable
+data class Show(
+    val id: String,
+    val title: String,
+    val type: String,
+    val poster: String? = null,
+    val overview: String? = null,
+    val first_air_date: String? = null,
+    val vote_average: String? = null,
+    val item_count: Int = 0
+)
+
+@Serializable
+data class ShowDetail(
+    val id: String,
+    val title: String,
+    val type: String,
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val overview: String? = null,
+    val first_air_date: String? = null,
+    val vote_average: String? = null,
+    val episodes: List<MediaItem> = emptyList()
+)
