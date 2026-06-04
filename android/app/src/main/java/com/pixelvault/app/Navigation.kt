@@ -1,8 +1,8 @@
 package com.pixelvault.app
 
 import androidx.compose.runtime.*
-import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.pixelvault.app.ui.screens.*
 import com.pixelvault.app.viewmodel.AppViewModel
@@ -14,35 +14,49 @@ fun PixelVaultNav(viewModel: AppViewModel) {
 
     if (!state.isReady) return
 
-    val start = when {
-        state.serverUrl.isBlank() -> "setup"
-        state.token == null -> "login"
-        else -> "library"
-    }
+    val start = if (state.token != null) "library" else "connect"
 
     NavHost(navController = navController, startDestination = start) {
 
-        composable("setup") {
-            SetupScreen(viewModel = viewModel, onConnected = {
-                navController.navigate("login") { popUpTo("setup") { inclusive = true } }
-            })
+        composable("connect") {
+            ConnectScreen(
+                onScanQr = { navController.navigate("qrscan") },
+                onEnterCode = { navController.navigate("codeentry") },
+                onLoginManual = { navController.navigate("login") }
+            )
+        }
+
+        composable("qrscan") {
+            QrScanScreen(
+                viewModel = viewModel,
+                onPaired = {
+                    navController.navigate("library") {
+                        popUpTo("connect") { inclusive = true }
+                    }
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("codeentry") {
+            PairCodeScreen(
+                viewModel = viewModel,
+                onPaired = {
+                    navController.navigate("library") {
+                        popUpTo("connect") { inclusive = true }
+                    }
+                },
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable("login") {
             LoginScreen(
                 viewModel = viewModel,
                 onLoggedIn = {
-                    navController.navigate("library") { popUpTo("login") { inclusive = true } }
-                },
-                onPair = { navController.navigate("pair") }
-            )
-        }
-
-        composable("pair") {
-            PairScreen(
-                viewModel = viewModel,
-                onPaired = {
-                    navController.navigate("library") { popUpTo("login") { inclusive = true } }
+                    navController.navigate("library") {
+                        popUpTo("connect") { inclusive = true }
+                    }
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -54,7 +68,9 @@ fun PixelVaultNav(viewModel: AppViewModel) {
                 onPlay = { id -> navController.navigate("player/$id") },
                 onLogout = {
                     viewModel.logout()
-                    navController.navigate("login") { popUpTo("library") { inclusive = true } }
+                    navController.navigate("connect") {
+                        popUpTo("library") { inclusive = true }
+                    }
                 }
             )
         }

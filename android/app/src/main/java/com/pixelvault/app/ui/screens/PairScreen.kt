@@ -8,7 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -16,36 +19,45 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import com.pixelvault.app.ui.components.*
+import com.pixelvault.app.ui.components.PixelShape
 import com.pixelvault.app.ui.theme.*
 import com.pixelvault.app.viewmodel.AppViewModel
 
+// ── Code entry with numeric PIN pad ──────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PairScreen(viewModel: AppViewModel, onPaired: () -> Unit, onBack: () -> Unit) {
+fun PairCodeScreen(
+    viewModel: AppViewModel,
+    onPaired: () -> Unit,
+    onBack: () -> Unit
+) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
-    var code by remember { mutableStateOf("") }
+    var digits by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var showCamera by remember { mutableStateOf(false) }
-    var cameraPermission by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
-    }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        cameraPermission = it; if (it) showCamera = true
-    }
+    val isDiscovering by viewModel.isDiscovering.collectAsState()
+    val discoveredUrl by viewModel.discoveredUrl.collectAsState()
 
-    fun redeem(input: String) {
+    LaunchedEffect(Unit) { viewModel.startServerDiscovery() }
+    DisposableEffect(Unit) { onDispose { viewModel.stopServerDiscovery() } }
+
+    fun redeem() {
+        if (digits.length != 6) return
         error = null
-        viewModel.redeemCode(input) { ok, msg -> if (ok) onPaired() else error = msg }
+        viewModel.redeemCode(digits) { ok, msg ->
+            if (ok) onPaired() else { error = msg; digits = "" }
+        }
     }
 
     Scaffold(
@@ -53,7 +65,11 @@ fun PairScreen(viewModel: AppViewModel, onPaired: () -> Unit, onBack: () -> Unit
         topBar = {
             TopAppBar(
                 title = { Text("PAIR DEVICE", style = MaterialTheme.typography.titleMedium) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = NeonGreen) } },
+                navigationIcon = {
+                    IconButton(onClick = { viewModel.stopServerDiscovery(); onBack() }) {
+                        Icon(Icons.Default.ArrowBack, null, tint = NeonGreen)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBg)
             )
         }
@@ -63,61 +79,262 @@ fun PairScreen(viewModel: AppViewModel, onPaired: () -> Unit, onBack: () -> Unit
                 .fillMaxSize()
                 .background(DarkBg)
                 .padding(padding)
-                .padding(24.dp),
+                .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (showCamera && cameraPermission) {
-                Box(Modifier.fillMaxWidth().height(280.dp).pixelBorder()) {
-                    QrCamera(onDetected = { payload -> showCamera = false; redeem(payload) })
+            Spacer(Modifier.height(24.dp))
+
+            // Server discovery status
+            DiscoveryStatus(isDiscovering, discoveredUrl)
+
+            Spacer(Modifier.height(40.dp))
+
+            Text("ENTER CODE", style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Generated on web UI → Settings → Pair Device",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(32.dp))
+
+            // Digit display
+            PinDisplay(digits = digits, length = 6)
+
+            error?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(it, style = MaterialTheme.typography.labelSmall, color = ErrorRed, textAlign = TextAlign.Center)
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // Pixel numpad
+            NumPad(
+                onDigit = { if (digits.length < 6) { digits += it; if (digits.length == 6) redeem() } },
+                onDelete = { if (digits.isNotEmpty()) digits = digits.dropLast(1) },
+                onOk = { redeem() },
+                enabled = !state.isLoading,
+                okEnabled = digits.length == 6 && (isDiscovering || discoveredUrl != null)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiscoveryStatus(isDiscovering: Boolean, discoveredUrl: String?) {
+    val dotAnim by rememberInfiniteTransition(label = "dots").animateFloat(
+        initialValue = 0f, targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
+        label = "dot"
+    )
+    val dots = ".".repeat((dotAnim.toInt() % 3) + 1).padEnd(3, ' ')
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, if (discoveredUrl != null) NeonGreen else TextSecondary, PixelShape)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .background(if (discoveredUrl != null) NeonGreen else if (isDiscovering) NeonGreen.copy(alpha = 0.4f) else ErrorRed)
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            when {
+                discoveredUrl != null -> "SERVER FOUND ✓"
+                isDiscovering -> "SCANNING LAN$dots"
+                else -> "SERVER NOT FOUND"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (discoveredUrl != null) NeonGreen else TextSecondary
+        )
+    }
+}
+
+@Composable
+private fun PinDisplay(digits: String, length: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(length) { i ->
+            val char = digits.getOrNull(i)
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .border(2.dp, if (i == digits.length) NeonGreen else TextSecondary, PixelShape)
+                    .background(DarkCard),
+                contentAlignment = Alignment.Center
+            ) {
+                if (char != null) {
+                    Text(char.toString(), style = MaterialTheme.typography.headlineMedium, color = NeonGreen)
+                } else if (i == digits.length) {
+                    // blinking cursor
+                    val alpha by rememberInfiniteTransition(label = "c$i").animateFloat(
+                        initialValue = 1f, targetValue = 0f,
+                        animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "cur"
+                    )
+                    Box(Modifier.width(2.dp).height(20.dp).alpha(alpha).background(NeonGreen))
                 }
-                Spacer(Modifier.height(16.dp))
-                TextButton(onClick = { showCamera = false }) {
-                    Text("ENTER CODE MANUALLY", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+            }
+            if (i == 2) Spacer(Modifier.width(4.dp))
+        }
+    }
+}
+
+@Composable
+private fun NumPad(
+    onDigit: (String) -> Unit,
+    onDelete: () -> Unit,
+    onOk: () -> Unit,
+    enabled: Boolean,
+    okEnabled: Boolean
+) {
+    val rows = listOf(
+        listOf("1","2","3"),
+        listOf("4","5","6"),
+        listOf("7","8","9"),
+        listOf("←","0","OK")
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        rows.forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { key ->
+                    val isOk = key == "OK"
+                    val isDel = key == "←"
+                    val active = enabled && (if (isOk) okEnabled else true)
+                    Box(
+                        Modifier
+                            .size(72.dp)
+                            .border(
+                                2.dp,
+                                when { isOk && active -> NeonGreen; !active -> TextSecondary.copy(alpha = 0.3f); else -> TextSecondary },
+                                PixelShape
+                            )
+                            .background(if (isOk && active) NeonGreen.copy(alpha = 0.08f) else DarkCard)
+                            .clickable(enabled = active) {
+                                when { isOk -> onOk(); isDel -> onDelete(); else -> onDigit(key) }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            key,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = if (isDel || isOk) 10.sp else 16.sp
+                            ),
+                            color = when { isOk && active -> NeonGreen; !active -> TextSecondary.copy(alpha = 0.3f); else -> TextSecondary }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── QR Scan screen ────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QrScanScreen(
+    viewModel: AppViewModel,
+    onPaired: () -> Unit,
+    onBack: () -> Unit
+) {
+    val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    var error by remember { mutableStateOf<String?>(null) }
+    var hasCameraPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        hasCameraPermission = it
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) launcher.launch(Manifest.permission.CAMERA)
+    }
+
+    fun onQrDetected(raw: String) {
+        // QR format from web UI: http://host:port/pair/CODE
+        // Extract host:port and code
+        val match = Regex("(https?://[^/]+)/pair/([A-Z0-9]+)", RegexOption.IGNORE_CASE).find(raw)
+        if (match != null) {
+            val serverUrl = match.groupValues[1]
+            val code = match.groupValues[2]
+            viewModel.setServerUrl(serverUrl)
+            viewModel.redeemCode(code) { ok, msg -> if (ok) onPaired() else error = msg }
+        } else {
+            // Try federation QR (pvconnect://base64payload)
+            if (raw.startsWith("pvconnect://")) {
+                viewModel.redeemFederationQr(raw.removePrefix("pvconnect://")) { ok, msg ->
+                    if (ok) onPaired() else error = msg
                 }
             } else {
-                Text("ENTER 6-DIGIT CODE", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Generate a code on the web UI\nSettings → Pair Device",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(24.dp))
+                error = "QR no reconocido. Usa el QR de Settings → Pair Device."
+            }
+        }
+    }
 
-                PixelTextField(
-                    value = code,
-                    onValueChange = { if (it.length <= 7) code = it.uppercase(); error = null },
-                    label = "ABC-123",
-                    modifier = Modifier.fillMaxWidth()
+    Scaffold(
+        containerColor = Color.Black,
+        topBar = {
+            TopAppBar(
+                title = { Text("SCAN QR", style = MaterialTheme.typography.titleMedium, color = NeonGreen) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = NeonGreen) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Black)
+            )
+        }
+    ) { padding ->
+        Box(Modifier.fillMaxSize().background(Color.Black).padding(padding)) {
+            if (hasCameraPermission) {
+                QrCameraView(
+                    onDetected = ::onQrDetected,
+                    isProcessing = state.isLoading
                 )
-
-                error?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = ErrorRed)
+            } else {
+                Column(
+                    Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text("CAMERA REQUIRED", style = MaterialTheme.typography.headlineMedium, color = NeonGreen)
+                    Spacer(Modifier.height(16.dp))
+                    Text("Allow camera access to scan QR codes.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
+            }
 
-                Spacer(Modifier.height(16.dp))
-
-                PixelButton(
-                    text = if (state.isLoading) "..." else "REDEEM",
-                    onClick = { redeem(code) },
-                    enabled = !state.isLoading && code.replace("-", "").length == 6,
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
+            // Crosshair overlay
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(220.dp)
+                        .border(2.dp, NeonGreen, PixelShape)
                 )
+            }
 
-                Spacer(Modifier.height(24.dp))
-                HorizontalDivider(color = TextSecondary, thickness = 1.dp)
-                Spacer(Modifier.height(24.dp))
-
-                PixelButton(
-                    text = "SCAN QR CODE",
-                    onClick = {
-                        if (cameraPermission) showCamera = true
-                        else permissionLauncher.launch(Manifest.permission.CAMERA)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                )
+            // Bottom info
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (state.isLoading) {
+                    CircularProgressIndicator(color = NeonGreen, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text("CONNECTING...", style = MaterialTheme.typography.bodyMedium, color = NeonGreen)
+                } else {
+                    Text(
+                        error ?: "Point at the QR code on your web UI",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (error != null) ErrorRed else TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
@@ -125,7 +342,7 @@ fun PairScreen(viewModel: AppViewModel, onPaired: () -> Unit, onBack: () -> Unit
 
 @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @Composable
-private fun QrCamera(onDetected: (String) -> Unit) {
+private fun QrCameraView(onDetected: (String) -> Unit, isProcessing: Boolean) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context) }
@@ -133,17 +350,18 @@ private fun QrCamera(onDetected: (String) -> Unit) {
     var detected by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val cameraProvider = ProcessCameraProvider.getInstance(context).get()
+        val provider = ProcessCameraProvider.getInstance(context).get()
         val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
         val analysis = ImageAnalysis.Builder()
             .setTargetResolution(Size(1280, 720))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .build()
+
         analysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { proxy ->
-            val mediaImage = proxy.image
-            if (mediaImage != null && !detected) {
-                val img = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-                scanner.process(img)
+            val img = proxy.image
+            if (img != null && !detected && !isProcessing) {
+                val input = InputImage.fromMediaImage(img, proxy.imageInfo.rotationDegrees)
+                scanner.process(input)
                     .addOnSuccessListener { barcodes ->
                         barcodes.firstOrNull()?.rawValue?.let {
                             if (!detected) { detected = true; onDetected(it) }
@@ -152,8 +370,8 @@ private fun QrCamera(onDetected: (String) -> Unit) {
                     .addOnCompleteListener { proxy.close() }
             } else proxy.close()
         }
-        cameraProvider.unbindAll()
-        cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+        provider.unbindAll()
+        provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
     }
 
     AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
