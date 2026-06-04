@@ -12,9 +12,11 @@
 **Your self-hosted media vault with pixel-art soul.**
 
 [![CI](https://github.com/nemesbak/pixelvault/actions/workflows/ci.yml/badge.svg)](https://github.com/nemesbak/pixelvault/actions/workflows/ci.yml)
+[![Android](https://github.com/nemesbak/pixelvault/actions/workflows/android.yml/badge.svg)](https://github.com/nemesbak/pixelvault/actions/workflows/android.yml)
 [![Docker Hub](https://img.shields.io/docker/pulls/nemesbak/pixelvault-server?label=Docker%20pulls&logo=docker)](https://hub.docker.com/r/nemesbak/pixelvault-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](LICENSE)
 [![Node 20](https://img.shields.io/badge/Node-20-brightgreen?logo=node.js)](https://nodejs.org)
+[![Android 7+](https://img.shields.io/badge/Android-7%2B-brightgreen?logo=android)](https://github.com/nemesbak/pixelvault/releases)
 
 </div>
 
@@ -22,7 +24,7 @@
 
 ## WHAT IS THIS?
 
-PixelVault is a **self-hosted media server** — think Jellyfin, but with a retro pixel-art identity and no bloat. Drop your videos in a folder, point PixelVault at it, and get a neon-lit library you can stream from any browser or TV.
+PixelVault is a **self-hosted media server** — think Jellyfin, but with a retro pixel-art identity and no bloat. Drop your videos in a folder, point PixelVault at it, and stream from any browser or Android device.
 
 ```
 ┌─────────────────────────────────────┐
@@ -41,14 +43,15 @@ PixelVault is a **self-hosted media server** — think Jellyfin, but with a retr
 │  • TMDB metadata enrichment         │
 │  • JWT auth + QR pairing            │
 │  • HTTP 206 range streaming         │
-└──────────────┬──────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────────┐
-│  PixelVault UI  :5173 / :80         │
-│  Press Start 2P · neon green        │
-│  pixel-art controls · no frameworks │
-└─────────────────────────────────────┘
+└──────────┬───────────────┬──────────┘
+           │               │
+           ▼               ▼
+┌──────────────────┐  ┌─────────────────┐
+│  Web UI :80      │  │  Android app    │
+│  Press Start 2P  │  │  Kotlin+Compose │
+│  neon green      │  │  ExoPlayer      │
+│  no frameworks   │  │  QR pairing     │
+└──────────────────┘  └─────────────────┘
 ```
 
 ---
@@ -67,8 +70,9 @@ PixelVault is a **self-hosted media server** — think Jellyfin, but with a retr
 | TV show / season grouping | ✅ |
 | Multi-library support | ✅ |
 | SRT / VTT subtitle sidecars | ✅ |
+| **Android app** (native Compose + ExoPlayer) | ✅ |
+| Audio transcoding (AC3/DTS → AAC) | ✅ |
 | Federation via BitTorrent DHT | 🧪 Experimental |
-| Android app | 🗺️ Roadmap |
 
 ---
 
@@ -98,31 +102,56 @@ cp .env.example .env
 docker compose up -d
 ```
 
-That's it. Open **http://localhost:5173**, create your account, and your library will start scanning automatically.
+Open **http://localhost:5173**, register your account, and the library scan starts automatically.
 
-### 3 — First run
+### 3 — Connect Android
 
-1. Register an account at the login screen
-2. Wait ~30 seconds for the initial scan (bottom bar shows progress)
-3. Use the **SCAN** button anytime to pick up new files
+1. Download the APK from [Releases](https://github.com/nemesbak/pixelvault/releases)
+2. Install it (allow "Unknown sources" if prompted)
+3. Enter your server URL: `http://YOUR_SERVER_IP:3000`
+4. Login or go to Settings → **Pair Device** on the web UI to get a 6-digit code / QR
+
+---
+
+## ANDROID APP
+
+Native Android client built with Kotlin + Jetpack Compose.
+
+| Screen | Description |
+|---|---|
+| Setup | Enter server URL, connectivity check |
+| Login / Register | Username + password |
+| Pair | 6-digit code or QR scan with camera |
+| Library | Thumbnail grid, live search |
+| Player | ExoPlayer full-screen · pixel-art controls · ±10s seek · progress saved |
+
+**Requirements:** Android 7.0+ (API 24)
+
+### Build from source
+
+```bash
+# Open android/ in Android Studio, or:
+cd android
+gradle assembleDebug
+# APK: app/build/outputs/apk/debug/app-debug.apk
+```
 
 ---
 
 ## PRODUCTION DEPLOYMENT
 
-Use `docker-compose.prod.yml` which pulls pre-built images from Docker Hub and exposes the web UI on port 80:
-
 ```bash
-# Required env vars for production
-export DB_PASSWORD=a_strong_random_password
-export JWT_SECRET=a_long_random_secret_min_32_chars
+export DB_PASSWORD=$(openssl rand -hex 32)
+export JWT_SECRET=$(openssl rand -hex 32)
 export MEDIA_PATH=/srv/media
 export TMDB_TOKEN=your_token
 
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-> **Tip:** Put nginx or Traefik in front for HTTPS. Never expose the PostgreSQL port (5432) publicly.
+> Put nginx or Traefik in front for HTTPS. Never expose port 5432 publicly.
+
+Full guide: [`docs/DEPLOY.md`](docs/DEPLOY.md)
 
 ---
 
@@ -130,46 +159,47 @@ docker compose -f docker-compose.prod.yml up -d
 
 ```
 pixelvault/
-├── server/                 # Node.js 20 + Fastify 4 API
+├── server/                  # Node.js 20 + Fastify 5 API
 │   └── src/
-│       ├── index.js        # Entry point, plugin registration
-│       ├── db.js           # PostgreSQL client + migrations
-│       ├── scanner.js      # Media scanner (FFmpeg metadata + thumbnails)
-│       ├── tmdb.js         # TMDB API client
-│       ├── federation.js   # BitTorrent DHT peer discovery
+│       ├── index.js         # Entry point, plugin registration
+│       ├── db.js            # PostgreSQL client + migrations
+│       ├── scanner.js       # FFmpeg metadata + thumbnail generator
+│       ├── tmdb.js          # TMDB metadata enrichment
+│       ├── federation.js    # BitTorrent DHT peer discovery
 │       └── routes/
-│           ├── media.js    # Library CRUD
-│           ├── stream.js   # HTTP 206 range streaming
-│           ├── users.js    # Auth (register/login/JWT)
-│           ├── pairing.js  # QR + 6-digit device pairing
-│           ├── shows.js    # TV show grouping
-│           ├── subtitles.js
-│           ├── libraries.js
+│           ├── media.js     # Library CRUD + watch progress
+│           ├── stream.js    # HTTP 206 range streaming + audio transcode
+│           ├── users.js     # Auth (register/login/JWT)
+│           ├── pairing.js   # QR + 6-digit device pairing
+│           ├── shows.js     # TV show grouping
+│           ├── subtitles.js # SRT/VTT extraction via FFmpeg
+│           ├── libraries.js # Multi-library management
 │           └── federation.js
 │
-├── web/                    # React 18 + Vite 5 SPA
+├── web/                     # React 18 + Vite 5 SPA
 │   └── src/
-│       ├── App.jsx
-│       ├── api.js          # Typed fetch wrappers
-│       ├── index.css       # All styles — pixel-art, zero frameworks
-│       ├── components/
-│       │   ├── MediaCard.jsx
-│       │   ├── ShowCard.jsx
-│       │   ├── ShowDetail.jsx
-│       │   └── PairScreen.jsx
-│       └── pages/
-│           ├── LibraryPage.jsx
-│           ├── PlayerPage.jsx
-│           ├── LoginPage.jsx
-│           └── SettingsPage.jsx
+│       ├── api.js           # Typed fetch wrappers
+│       ├── index.css        # All styles — pixel-art, zero CSS frameworks
+│       ├── components/      # MediaCard, ShowCard, ShowDetail, PairScreen
+│       └── pages/           # LibraryPage, PlayerPage, LoginPage, SettingsPage
 │
-├── signaling/              # Optional self-hosted WebRTC signaling
-│   ├── server.js           # Node.js WebSocket server
-│   └── worker.js           # Cloudflare Worker alternative
+├── android/                 # Native Android app
+│   └── app/src/main/
+│       ├── java/com/pixelvault/app/
+│       │   ├── MainActivity.kt
+│       │   ├── Navigation.kt
+│       │   ├── data/        # ApiClient (Ktor), Models, Prefs (DataStore)
+│       │   ├── viewmodel/   # AppViewModel
+│       │   └── ui/
+│       │       ├── theme/   # Press Start 2P · neon green palette
+│       │       ├── components/ # PixelButton, PixelCard, PixelTextField
+│       │       └── screens/ # Setup, Login, Pair, Library, Player
+│       └── res/
 │
-├── docker-compose.yml      # Dev (hot reload, source mounts)
-├── docker-compose.prod.yml # Production (pre-built images, nginx)
-└── .env.example            # Config template
+├── signaling/               # Optional self-hosted WebRTC signaling server
+├── docker-compose.yml       # Dev (hot reload, source mounts)
+├── docker-compose.prod.yml  # Production (Docker Hub images, nginx)
+└── .env.example
 ```
 
 ### API endpoints
@@ -178,42 +208,38 @@ pixelvault/
 |---|---|---|
 | `POST` | `/api/users/register` | Create account |
 | `POST` | `/api/users/login` | Get JWT |
-| `GET` | `/api/media` | List all media |
-| `GET` | `/api/media/scan` | Trigger library scan |
+| `GET` | `/api/media` | List media (`?search=&page=&limit=`) |
+| `POST` | `/api/media/scan` | Trigger library scan |
 | `GET` | `/api/stream/:id` | Stream video (HTTP 206) |
 | `GET` | `/api/shows` | List TV shows |
 | `GET` | `/api/libraries` | List libraries |
-| `POST` | `/api/pair/generate` | Generate QR pairing code |
-| `POST` | `/api/pair/redeem` | Redeem 6-digit code → JWT |
+| `POST` | `/api/pair/generate` | Generate QR + 6-digit code |
+| `POST` | `/api/pair/redeem` | Redeem code → JWT |
 | `GET` | `/api/health` | Health check |
 
-Full API docs: [`docs/API.md`](docs/API.md)
+Full reference: [`docs/API.md`](docs/API.md)
 
 ---
 
 ## DESIGN PHILOSOPHY
 
-- **Pixel-art only** — Press Start 2P font, `#39FF14` neon green, `#0a0a0a` background. No CSS frameworks, no Tailwind, no component libraries.
-- **Zero client-side tracking** — no analytics, no telemetry.
-- **Direct play first** — no transcoding overhead; browser plays the source file.
-- **One Docker Compose** — spin up the whole stack with one command.
+- **Pixel-art everywhere** — Press Start 2P font, `#39FF14` neon green, `#0a0a0a` background. Web and Android share the same visual language. No CSS frameworks, no UI component libraries.
+- **Zero tracking** — no analytics, no telemetry, no cloud accounts required.
+- **Direct play first** — the browser and ExoPlayer play the source file directly. Transcoding only kicks in for incompatible audio codecs (AC3/DTS → AAC).
+- **One command** — `docker compose up -d` starts everything.
 
 ---
 
 ## CONTRIBUTING
 
-Contributions are welcome! Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.
-
-**Branch model:**
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.
 
 ```
 main   ← stable releases (tagged)
- └── dev ← integration branch for PRs
-      └── feat/your-feature
+ └── dev ← target for all PRs
+      ├── feat/your-feature
       └── fix/the-bug
 ```
-
-Always target `dev` with your PRs. `main` is only updated via releases.
 
 ---
 
@@ -224,18 +250,17 @@ Always target `dev` with your PRs. `main` is only updated via releases.
 | `nemesbak/pixelvault-server` | `docker pull nemesbak/pixelvault-server` |
 | `nemesbak/pixelvault-web` | `docker pull nemesbak/pixelvault-web` |
 
-Images are built for `linux/amd64` and `linux/arm64` (Raspberry Pi 4+).
+Multi-arch: `linux/amd64` + `linux/arm64` (Raspberry Pi 4+).
 
 ---
 
 ## ROADMAP
 
-- [ ] Android native app
-- [ ] Transcoding profiles (for older devices)
-- [ ] User roles (admin / viewer)
+- [ ] User roles (admin / read-only)
 - [ ] Playlist support
-- [ ] Stable federation / peer sharing
-- [ ] OIDC / SSO support
+- [ ] Stable federation / peer library sharing
+- [ ] Transcoding profiles for older devices
+- [ ] OIDC / SSO
 
 ---
 
