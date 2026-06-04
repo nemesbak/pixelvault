@@ -14,7 +14,7 @@ class ApiClient(private val baseUrl: String, private val token: String? = null) 
 
     private val http = HttpClient(Android) {
         install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true; isLenient = true })
+            json(Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true })
         }
         install(Logging) { level = LogLevel.NONE }
         engine { connectTimeout = 8_000; socketTimeout = 15_000 }

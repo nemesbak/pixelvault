@@ -19,6 +19,7 @@ import coil.compose.AsyncImage
 import com.pixelvault.app.data.MediaItem
 import com.pixelvault.app.ui.components.*
 import com.pixelvault.app.ui.theme.*
+import com.pixelvault.app.ui.util.formatDuration
 import com.pixelvault.app.viewmodel.AppViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -225,9 +226,3 @@ private fun EpisodeRow(ep: MediaItem, thumbnailUrl: String?, onClick: () -> Unit
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(TextSecondary.copy(alpha = 0.1f)))
 }
 
-private fun formatDuration(seconds: Int): String {
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
-}

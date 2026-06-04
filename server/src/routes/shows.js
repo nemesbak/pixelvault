@@ -8,7 +8,7 @@ export default async function showRoutes(fastify) {
 
     let q = `
       SELECT s.*,
-        COUNT(m.id) as item_count,
+        COUNT(m.id)::integer as item_count,
         MAX(m.scanned_at) as last_added
       FROM shows s
       LEFT JOIN media_items m ON m.show_id = s.id

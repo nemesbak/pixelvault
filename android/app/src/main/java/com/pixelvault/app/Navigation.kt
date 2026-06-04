@@ -89,7 +89,6 @@ fun PixelVaultNav(viewModel: AppViewModel) {
             arguments = listOf(navArgument("showId") { type = NavType.StringType })
         ) { back ->
             val showId = back.arguments?.getString("showId") ?: return@composable
-            val show = state.showDetail
             Box(Modifier.fillMaxSize()) {
                 ShowDetailScreen(
                     showId = showId,
