@@ -54,12 +54,22 @@ fun PairCodeScreen(
     val isDiscovering by viewModel.isDiscovering.collectAsState()
     val discoveredUrl by viewModel.discoveredUrl.collectAsState()
     val savedUrl = state.serverUrl.ifBlank { null }
-    val showManualInput = !isDiscovering && discoveredUrl == null && savedUrl == null
+    // Always show manual input once scan finishes with no result — even if there's a stale savedUrl
+    val showManualInput = !isDiscovering && discoveredUrl == null
     var manualUrl by remember { mutableStateOf("") }
     var probeError by remember { mutableStateOf(false) }
+    var isProbing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.startServerDiscovery() }
     DisposableEffect(Unit) { onDispose { viewModel.stopServerDiscovery() } }
+
+    // Pre-fill + silently probe the saved URL so it shows as SERVER FOUND if still reachable
+    LaunchedEffect(savedUrl) {
+        if (savedUrl != null) {
+            if (manualUrl.isBlank()) manualUrl = savedUrl.removePrefix("http://")
+            viewModel.probeServer(savedUrl) {}
+        }
+    }
 
     fun redeem() {
         if (digits.length != 6) return
@@ -102,11 +112,13 @@ fun PairCodeScreen(
                 ManualServerInput(
                     value = manualUrl,
                     onValueChange = { manualUrl = it; probeError = false },
-                    isLoading = state.isLoading,
+                    isLoading = isProbing,
                     isError = probeError,
                     onConnect = {
                         probeError = false
+                        isProbing = true
                         viewModel.probeServer(manualUrl) { ok ->
+                            isProbing = false
                             if (!ok) probeError = true
                         }
                     }

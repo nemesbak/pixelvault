@@ -59,7 +59,7 @@ fun ConnectScreen(
         Spacer(Modifier.height(10.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("v0.2.0", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = TextSecondary)
+            Text("v0.3.1", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = TextSecondary)
             Spacer(Modifier.width(8.dp))
             Text("█", fontFamily = FontFamily.Monospace, fontSize = 10.sp,
                 color = NeonGreen, modifier = Modifier.alpha(blink))
