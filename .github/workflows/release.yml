@@ -20,8 +20,8 @@ jobs:
   build-and-push:
     name: Build & Push
     runs-on: ubuntu-latest
-    # Skip entirely if Docker Hub credentials are not configured
-    if: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+    # Job continues-on-error so missing Docker Hub secrets don't fail the workflow
+    continue-on-error: true
     permissions:
       contents: read
       packages: write

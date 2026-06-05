@@ -59,9 +59,9 @@ jobs:
         run: gradle assembleRelease --no-daemon
 
       - name: Sign APK
-        if: ${{ secrets.SIGNING_KEY != '' }}
-        uses: r0adkll/sign-android-release@v1
         id: sign
+        continue-on-error: true
+        uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: android/app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEY }}
@@ -75,8 +75,9 @@ jobs:
         id: prep
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          if [ -n "${{ steps.sign.outputs.signedReleaseFile }}" ]; then
-            SRC="${{ steps.sign.outputs.signedReleaseFile }}"
+          SIGNED="${{ steps.sign.outputs.signedReleaseFile }}"
+          if [ -n "$SIGNED" ] && [ -f "$SIGNED" ]; then
+            SRC="$SIGNED"
           else
             SRC="android/app/build/outputs/apk/release/app-release-unsigned.apk"
           fi
@@ -89,13 +90,4 @@ jobs:
         with:
           files: ${{ steps.prep.outputs.apk }}
           append_body: true
-          body: |
-
-            ---
-            ### APK built by CI
-            Download `pixelvault-${{ github.ref_name }}.apk` and install on Android 8.0+.
-
-            **Primera vez** → usa **SCAN QR CODE** desde el web UI (Settings → Pair Device).
-            **Re-emparejamiento** → usa **ENTER CODE** con el código de 6 dígitos.
-
-            > Activa "Instalar fuentes desconocidas" si Android lo solicita.
+          body: "**APK build by CI** — install on Android 8.0+. First pair: use **SCAN QR CODE**."
