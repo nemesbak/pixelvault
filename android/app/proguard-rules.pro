@@ -17,3 +17,10 @@
 # Media3
 -keep class androidx.media3.** { *; }
 -dontwarn androidx.media3.**
+
+# slf4j — pulled in transitively; no Android impl needed
+-dontwarn org.slf4j.**
+
+# OkHttp / Okio (Ktor engine pulls these in)
+-dontwarn okhttp3.**
+-dontwarn okio.**
