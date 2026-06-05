@@ -13,8 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -25,9 +23,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,31 +46,24 @@ fun PairCodeScreen(
     val state by viewModel.state.collectAsState()
     var digits by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    val isDiscovering by viewModel.isDiscovering.collectAsState()
-    val discoveredUrl by viewModel.discoveredUrl.collectAsState()
     val savedUrl = state.serverUrl.ifBlank { null }
-    // Always show manual input once scan finishes with no result — even if there's a stale savedUrl
-    val showManualInput = !isDiscovering && discoveredUrl == null
-    var manualUrl by remember { mutableStateOf("") }
-    var probeError by remember { mutableStateOf(false) }
-    var isProbing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.startServerDiscovery() }
     DisposableEffect(Unit) { onDispose { viewModel.stopServerDiscovery() } }
-
-    // Pre-fill + silently probe the saved URL so it shows as SERVER FOUND if still reachable
-    LaunchedEffect(savedUrl) {
-        if (savedUrl != null) {
-            if (manualUrl.isBlank()) manualUrl = savedUrl.removePrefix("http://")
-            viewModel.probeServer(savedUrl) {}
-        }
-    }
+    // Silently probe saved URL on open (sets discoveredUrl if still reachable)
+    LaunchedEffect(savedUrl) { if (savedUrl != null) viewModel.probeServer(savedUrl) {} }
 
     fun redeem() {
         if (digits.length != 6) return
         error = null
         viewModel.redeemCode(digits) { ok, msg ->
-            if (ok) onPaired() else { error = msg; digits = "" }
+            if (ok) onPaired()
+            else {
+                error = if (msg?.contains("blank") == true || msg?.contains("not found") == true)
+                    "Server not found. Scan the QR code first."
+                else msg
+                digits = ""
+            }
         }
     }
 
@@ -99,46 +87,20 @@ fun PairCodeScreen(
                 .background(DarkBg)
                 .padding(padding)
                 .padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Spacer(Modifier.height(24.dp))
-
-            // Server discovery status
-            DiscoveryStatus(isDiscovering, discoveredUrl, savedUrl)
-
-            // Manual IP input — shown only when auto-discovery fails completely
-            if (showManualInput) {
-                Spacer(Modifier.height(10.dp))
-                ManualServerInput(
-                    value = manualUrl,
-                    onValueChange = { manualUrl = it; probeError = false },
-                    isLoading = isProbing,
-                    isError = probeError,
-                    onConnect = {
-                        probeError = false
-                        isProbing = true
-                        viewModel.probeServer(manualUrl) { ok ->
-                            isProbing = false
-                            if (!ok) probeError = true
-                        }
-                    }
-                )
-            }
-
-            Spacer(Modifier.height(40.dp))
-
             Text("ENTER CODE", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(8.dp))
             Text(
-                "Generated on web UI → Settings → Pair Device",
+                "Web UI → Settings → Pair Device",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextSecondary,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
 
-            // Digit display
             PinDisplay(digits = digits, length = 6)
 
             error?.let {
@@ -148,147 +110,14 @@ fun PairCodeScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Pixel numpad
             NumPad(
                 onDigit = { if (digits.length < 6) { digits += it; if (digits.length == 6) redeem() } },
                 onDelete = { if (digits.isNotEmpty()) digits = digits.dropLast(1) },
                 onOk = { redeem() },
                 enabled = !state.isLoading,
-                okEnabled = digits.length == 6 && (isDiscovering || discoveredUrl != null || savedUrl != null)
+                okEnabled = digits.length == 6
             )
         }
-    }
-}
-
-@Composable
-private fun ManualServerInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    isLoading: Boolean,
-    isError: Boolean,
-    onConnect: () -> Unit
-) {
-    val keyboard = LocalSoftwareKeyboardController.current
-    Column {
-        Text(
-            "SERVER NOT FOUND — enter IP manually:",
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 7.sp,
-            color = ErrorRed,
-            modifier = Modifier.padding(bottom = 6.dp)
-        )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                placeholder = {
-                    Text(
-                        "192.168.1.x:3000",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp,
-                        color = TextSecondary.copy(alpha = 0.5f)
-                    )
-                },
-                singleLine = true,
-                isError = isError,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = {
-                    keyboard?.hide(); onConnect()
-                }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = NeonGreen,
-                    unfocusedBorderColor = TextSecondary.copy(alpha = 0.4f),
-                    errorBorderColor = ErrorRed,
-                    focusedTextColor = NeonGreen,
-                    unfocusedTextColor = NeonGreen,
-                    cursorColor = NeonGreen
-                ),
-                textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                modifier = Modifier.weight(1f).height(48.dp)
-            )
-            Box(
-                Modifier
-                    .size(48.dp)
-                    .border(1.dp, if (isLoading) TextSecondary else NeonGreen, PixelShape)
-                    .background(NeonGreen.copy(alpha = if (isLoading) 0f else 0.1f))
-                    .clickable(enabled = !isLoading && value.isNotBlank()) {
-                        keyboard?.hide(); onConnect()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        color = NeonGreen,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(16.dp)
-                    )
-                } else {
-                    Text("▶", style = MaterialTheme.typography.bodyMedium, color = NeonGreen)
-                }
-            }
-        }
-        if (isError) {
-            Text(
-                "Cannot reach server. Check IP and port.",
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 7.sp,
-                color = ErrorRed,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun DiscoveryStatus(isDiscovering: Boolean, discoveredUrl: String?, savedUrl: String?) {
-    val dotAnim by rememberInfiniteTransition(label = "dots").animateFloat(
-        initialValue = 0f, targetValue = 3f,
-        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing)),
-        label = "dot"
-    )
-    val dots = ".".repeat((dotAnim.toInt() % 3) + 1).padEnd(3, ' ')
-
-    val hasFallback = !isDiscovering && discoveredUrl == null && savedUrl != null
-    val borderColor = when {
-        discoveredUrl != null -> NeonGreen
-        hasFallback -> Color(0xFFFFCC00)
-        else -> TextSecondary
-    }
-    val dotColor = when {
-        discoveredUrl != null -> NeonGreen
-        isDiscovering -> NeonGreen.copy(alpha = 0.4f)
-        hasFallback -> Color(0xFFFFCC00)
-        else -> ErrorRed
-    }
-    val label = when {
-        discoveredUrl != null -> "SERVER FOUND ✓"
-        isDiscovering -> "SCANNING LAN$dots"
-        hasFallback -> "USING SAVED SERVER"
-        else -> "SERVER NOT FOUND"
-    }
-    val labelColor = when {
-        discoveredUrl != null -> NeonGreen
-        hasFallback -> Color(0xFFFFCC00)
-        else -> TextSecondary
-    }
-
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .border(1.dp, borderColor, PixelShape)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(Modifier.size(8.dp).background(dotColor))
-        Spacer(Modifier.width(12.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = labelColor)
     }
 }
 
