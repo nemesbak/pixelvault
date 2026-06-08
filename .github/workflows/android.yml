@@ -24,7 +24,7 @@ jobs:
           java-version: '17'
           distribution: temurin
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.10"
 
@@ -54,7 +54,7 @@ jobs:
           java-version: '17'
           distribution: temurin
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.10"
 
